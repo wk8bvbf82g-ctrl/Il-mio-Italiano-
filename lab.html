@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1e3a5f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Italiano Lab">
+<title>Il mio italiano Lab — laboratorio separato</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f6fa;color:#183250;font:17px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.launch{max-width:620px;margin:0 auto;padding:calc(42px + env(safe-area-inset-top)) 22px 60px}.badge{display:inline-block;border:1px solid #adc3df;border-radius:30px;padding:5px 12px;font-size:12px;letter-spacing:.1em;font-weight:800;background:#e5edf8}h1{font:normal 38px/1.12 Georgia,serif;margin:25px 0 14px}p{margin:12px 0}.box{margin-top:28px;background:white;border:1px solid #d9e3ef;border-radius:20px;padding:22px}.sub{font-size:14px;color:#50677e}button,a.button{font:inherit;display:inline-block;background:#244e7e;color:white;border:0;border-radius:12px;padding:13px 18px;min-height:48px;text-decoration:none;cursor:pointer}button:disabled{opacity:.55}a{color:#244e7e}button:focus-visible,a:focus-visible{outline:3px solid #b9801b;outline-offset:4px}[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main class="launch">
+<span class="badge">LABORATORIO SEPARATO · 0.1</span>
+<h1>Il mio italiano <em>Lab</em></h1>
+<p>Uno spazio per provare la voce e nuove funzioni, senza modificare il tuo dizionario principale.</p>
+<div class="box">
+<p id="boot-status" role="status" aria-live="polite">Preparo la copia di prova del dizionario…</p>
+<p class="sub" id="boot-detail">Alla prima apertura leggo soltanto il file pubblico <strong>index.html</strong> nella stessa cartella. I salvataggi del laboratorio sono separati.</p>
+<button id="boot-retry" type="button" hidden>Riprova il caricamento</button>
+</div>
+<p class="sub">Questo file deve chiamarsi <strong>lab.html</strong>. Caricalo accanto a index.html su GitHub, senza sostituire quest’ultimo.</p>
+<a href="./index.html">Apri il dizionario principale</a>
+</main>
+<noscript>Per usare questo laboratorio devi attivare JavaScript nel browser.</noscript>
+<script>
+/* Il mio italiano Lab 0.1 — 25/10/2026
+ * INSTALLAZIONE: caricare SOLO lab.html accanto all'index.html esistente.
+ * Non contiene chiavi API, servizi a pagamento o un modello generativo.
+ * Il primo avvio scarica una copia del codice pubblico del dizionario.
+ * La copia viene conservata nello spazio locale DEL LABORATORIO, quando disponibile.
+ * Il codice della copia utilizza un adattatore localStorage con prefisso dedicato:
+ * il laboratorio non legge, sovrascrive o cancella i salvataggi originali.
+ * Il file originale su GitHub non viene mai modificato: esiste solo una richiesta GET.
+ * La cache del codice non garantisce l'apertura offline della pagina stessa.
+ */
+(() => {
+'use strict';
+const PREFIX = 'il_mio_italiano_lab_v1::';
+const SNAPSHOT = PREFIX + 'source_snapshot';
+const SOURCE = new URL('./index.html', location.href);
+const isHTTP = /^https?:$/.test(location.protocol);
+let loading = false;
+function bootStatus(message, details) {
+  document.getElementById('boot-status').textContent = message;
+  if (details) document.getElementById('boot-detail').textContent = details;
+}
+function readSnapshot() { try { return window.localStorage.getItem(SNAPSHOT); } catch (_) { return null; } }
+function saveSnapshot(text) { try { window.localStorage.setItem(SNAPSHOT, text); } catch (_) { /* La copia continua in memoria. */ } }
+function validSource(text) {
+  return typeof text === 'string' && text.length < 4000000 &&
+    /originalWords/.test(text) && /view-parla/.test(text) &&
+    /function\s+findWord\s*\(/.test(text) && !/ITALIANO_LAB_COMPILED/.test(text);
+}
+function storageAdapter() {
+  const prefix = 'il_mio_italiano_lab_v1::data::';
+  const volatile = Object.create(null);
+  const deleted = new Set();
+  let unavailable = false;
+  const native = (() => { try { return window.localStorage; } catch (_) { return null; } })();
+  function warn() {
+    unavailable = true;
+    const el = document.getElementById('lab-storage-warning');
+    if (el) el.hidden = false;
+  }
+  function keys() {
+    const out = new Set(Object.keys(volatile));
+    try {
+      if (native) for (let i=0; i<native.length; i++) {
+        const k = native.key(i);
+        if (k && k.startsWith(prefix)) out.add(k.slice(prefix.length));
+      }
+    } catch (_) { warn(); }
+    deleted.forEach(k => out.delete(k));
+    return [...out];
+  }
+  window.__italianoLabStorage = {
+    getItem(key) {
+      key = String(key);
+      if (deleted.has(key)) return null;
+      if (Object.prototype.hasOwnProperty.call(volatile,key)) return volatile[key];
+      try { return native ? native.getItem(prefix + key) : (warn(), null); }
+      catch (_) { warn(); return null; }
+    },
+    setItem(key,value) {
+      key = String(key); value = String(value); deleted.delete(key); volatile[key] = value;
+      try { if (native) native.setItem(prefix + key,value); else warn(); }
+      catch (_) { warn(); }
+    },
+    removeItem(key) {
+      key = String(key); delete volatile[key]; deleted.add(key);
+      try { if (native) native.removeItem(prefix + key); else warn(); }
+      catch (_) { warn(); }
+    },
+    clear() { keys().forEach(k => this.removeItem(k)); },
+    key(index) { return keys()[Number(index)] ?? null; },
+    get length() { return keys().length; },
+    get unavailable() { return unavailable; }
+  };
+}
+
+function installLab() {
+  'use strict';
+  const $lab = id => document.getElementById(id);
+  const normal = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[“”«»"?!.,;:]+/g,' ').replace(/\s+/g,' ').trim();
+  const storage = window.__italianoLabStorage;
+  let recognition = null, activeWordLab = null, lastReply = '', speakingToken = 0, utteranceRef = null, listenTimer = null;
+  let turns = 0;
+  const api = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const status = text => { $lab('lab-status').textContent = text; };
+  const entry = () => $lab('lab-input');
+  const practiceExamples = [
+    {q:'Oggi ho tante cose da fare e non so da dove iniziare.',a:'Oggi ho molti impegni e faccio fatica a stabilire le priorità.',why:'Un’alternativa più precisa, non una correzione obbligatoria. Anche la frase di partenza è naturale.'},
+    {q:'Voglio una risposta subito.',a:'Potrei avere una risposta appena possibile?',why:'Questa formulazione rende la richiesta più cortese, ma non comunica la stessa urgenza. Per una scadenza precisa puoi dire: “Avrei bisogno di una risposta entro oggi”.'},
+    {q:'Non hai capito niente.',a:'Provo a spiegarmi in un altro modo.',why:'Questa alternativa evita di attribuire la colpa all’altra persona e riapre il dialogo.'},
+    {q:'Non sono d’accordo.',a:'La vedo diversamente: posso spiegarti perché?',why:'Entrambe le frasi sono corrette. La seconda invita a confrontare i punti di vista.'}
+  ];
+  function getWord(value) {
+    try { return typeof findWord === 'function' ? findWord(value) : null; } catch (_) { return null; }
+  }
+  function wordList() {
+    try { return typeof originalWords !== 'undefined' && Array.isArray(originalWords) ? originalWords : []; } catch (_) { return []; }
+  }
+  function announceReply(message, label='Risposta dal dizionario locale') {
+    lastReply = message;
+    turns += 1;
+    $lab('lab-turns').textContent = 'Turno ' + turns;
+    $lab('lab-answer-label').textContent = label;
+    $lab('lab-answer').textContent = message;
+    $lab('lab-response').hidden = false;
+    $lab('lab-speak').disabled = false;
+    status('Risposta pronta. Puoi ascoltarla oppure fare un’altra domanda.');
+    if ($lab('lab-auto-speak').checked) say(message);
+  }
+  function stopSpeech() {
+    speakingToken += 1;
+    try { window.speechSynthesis?.cancel(); } catch (_) {}
+    utteranceRef = null;
+    $lab('lab-stop-speech').disabled = true;
+  }
+  function finishListening(abort=false) {
+    if (recognition) {
+      try { abort ? recognition.abort() : recognition.stop(); } catch (_) {}
+    }
+    clearTimeout(listenTimer);
+  }
+  function say(text) {
+    finishListening(true);
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+      status('La lettura vocale non è disponibile in questo browser. Il testo resta visibile.'); return;
+    }
+    stopSpeech();
+    const token = ++speakingToken;
+    const u = new SpeechSynthesisUtterance(String(text).slice(0,2500));
+    utteranceRef = u;
+    u.lang = 'it-IT';
+    u.rate = Number($lab('lab-rate').value) || 0.95;
+    const voices = speechSynthesis.getVoices();
+    u.voice = voices.find(v => v.voiceURI === $lab('lab-voice').value) || voices.find(v => /^it(?:-|_)/i.test(v.lang)) || null;
+    u.onstart = () => { if (token !== speakingToken) return; status('Sto leggendo. Il microfono è spento.'); $lab('lab-stop-speech').disabled = false; };
+    u.onend = () => { if (token !== speakingToken) return; utteranceRef=null; $lab('lab-stop-speech').disabled=true; status('Tocca “Parla” per il prossimo turno.'); };
+    u.onerror = event => {
+      if (token !== speakingToken) return;
+      utteranceRef=null; $lab('lab-stop-speech').disabled=true;
+      if (!['canceled','interrupted'].includes(event.error)) status('La voce non è partita. Tocca di nuovo “Ascolta risposta”.');
+    };
+    try { speechSynthesis.speak(u); $lab('lab-stop-speech').disabled=false; }
+    catch (_) { status('La lettura vocale non è partita. Riprova dal pulsante “Ascolta risposta”.'); }
+  }
+  function voicesChanged() {
+    const sel = $lab('lab-voice');
+    const keep = sel.value;
+    sel.replaceChildren(new Option('Voce italiana del dispositivo',''));
+    try {
+      speechSynthesis.getVoices().filter(v=>/^it(?:-|_)/i.test(v.lang)).forEach(v=>sel.add(new Option(v.name,v.voiceURI)));
+      if ([...sel.options].some(o=>o.value===keep)) sel.value=keep;
+    } catch (_) {}
+  }
+  function beginListening() {
+    if (recognition) return;
+    if (!api || !window.isSecureContext) {
+      status('Usa la dettatura della tastiera: tocca il campo del testo e poi il microfono della tastiera.'); entry().focus(); return;
+    }
+    stopSpeech();
+    const r = new api();
+    recognition = r;
+    r.lang='it-IT'; r.continuous=false; r.interimResults=true; r.maxAlternatives=1;
+    let heard=false, reportedError=false;
+    $lab('lab-mic').disabled=true; $lab('lab-stop').disabled=false; $lab('lab-send').disabled=true;
+    status('Apro il microfono…');
+    r.onstart = () => { if (recognition===r) status('Ti ascolto. Di’ una parola o “Cosa significa garbato?”.'); };
+    r.onresult = e => {
+      if (recognition!==r) return;
+      const text=Array.from(e.results, x=>x[0].transcript).join(' ').trim();
+      if (text) { entry().value=text.slice(0,700); heard=true; }
+    };
+    r.onerror = e => {
+      if (recognition!==r) return;
+      reportedError=true;
+      const messages = {
+        'not-allowed':'Microfono non autorizzato. Puoi usare il microfono della tastiera oppure scrivere.',
+        'service-not-allowed':'Riconoscimento vocale non disponibile. Usa la dettatura della tastiera.',
+        'audio-capture':'Il microfono non è disponibile. Chiudi altre registrazioni e riprova.',
+        'network':'Il servizio vocale non è raggiungibile. Controlla la connessione oppure scrivi.',
+        'no-speech':'Non ho ricevuto parole. Tocca “Parla” e riprova.',
+        'aborted':'Ascolto interrotto.'
+      };
+      status(messages[e.error] || 'L’ascolto si è interrotto. Puoi correggere il testo e premere “Invia”.');
+    };
+    r.onend = () => {
+      if (recognition!==r) return;
+      recognition=null; clearTimeout(listenTimer);
+      $lab('lab-mic').disabled=false; $lab('lab-stop').disabled=true; $lab('lab-send').disabled=false;
+      if (!reportedError) status(heard ? 'Ho trascritto le parole. Controllale e tocca “Invia”.' : 'Nessuna parola riconosciuta. Puoi riprovare o scrivere.');
+    };
+    try {
+      r.start();
+      listenTimer=setTimeout(()=>{ if(recognition===r) finishListening(); },25000);
+    } catch (_) {
+      recognition=null; $lab('lab-mic').disabled=false; $lab('lab-stop').disabled=true; $lab('lab-send').disabled=false;
+      status('Il microfono non è partito. Usa la dettatura della tastiera oppure riprova.');
+    }
+  }
+  function answer(text) {
+    const n = normal(text);
+    if (!n) { status('Scrivi o pronuncia una parola prima di inviare.'); return; }
+    stopSpeech();
+    if (/^(aiuto|cosa posso chiedere|come funziona)$/.test(n)) {
+      announceReply('Puoi chiedere “Cosa significa garbato?”, “Sinonimi di garbato” o “Contrari di garbato”. Dopo una parola puoi dire “Un esempio”. Le risposte provengono dalle schede del dizionario. Non correggo liberamente qualsiasi frase.','Guida del laboratorio'); return;
+    }
+    if (/^(un esempio|fammi un esempio|dammi un esempio|esempio|un altro esempio)$/.test(n)) {
+      if (activeWordLab) announceReply(activeWordLab.e ? 'Esempio della scheda «'+activeWordLab.w+'»: '+activeWordLab.e+'\n\nProva a pronunciarlo ad alta voce.' : 'La scheda «'+activeWordLab.w+'» non contiene un esempio.');
+      else announceReply('Prima scegli una parola, per esempio: “Cosa significa garbato?”.','Guida del laboratorio');
+      return;
+    }
+    if (/^(un esercizio|fammi un esercizio|esercizio|migliora una frase|frase guida)$/.test(n)) { showExample(0); return; }
+    if (/^(prossima parola|altra parola|una parola|parola del giorno)$/.test(n)) {
+      const list=wordList();
+      if (!list.length) { announceReply('Il dizionario non è ancora disponibile. Ricarica il laboratorio.'); return; }
+      activeWordLab=list[(Math.floor(Date.now()/86400000)+turns)%list.length];
+      announceReply(activeWordLab.w+'. '+activeWordLab.d+'\n\nOra puoi chiedere “Un esempio” oppure “Sinonimi”.'); return;
+    }
+    const wanted = /\bcontrari(?:o)?\b|\bcontrari\b/.test(n) ? 'a' : /\bsinonim[io]\b/.test(n) ? 's' : 'd';
+    let query=n.replace(/^(?:per favore\s+)?(?:cosa significa|che cosa significa|cosa vuol dire|che vuol dire|significato di|definizione di|cerca(?: la parola)?|spiegami(?: la parola)?|dimmi(?: il significato di)?|sinonim[io](?: della parola| di| del| della)?|contrari(?:o)?(?: della parola| di| del| della)?)\s*/, '').trim();
+    const bareFollowup=/^(sinonimi|sinonimo|contrari|contrario|ripeti|ripeti la definizione|definizione)$/.test(n);
+    let found = bareFollowup ? activeWordLab : (getWord(query) || getWord(text.trim().replace(/[.?!]+$/,'')));
+    if (!found && !bareFollowup) found=wordList().find(w=>normal(w.w)===query) || null;
+    if (found) {
+      activeWordLab=found;
+      if (wanted==='s' || wanted==='a') {
+        const options=Array.isArray(found[wanted]) ? found[wanted] : [];
+        announceReply((wanted==='s'?'Sinonimi':'Contrari')+' di «'+found.w+'»: '+(options.length?options.join(', ')+'.':'non indicati in questa scheda.')+'\n\nLa scelta dipende dal significato e dalla frase.');
+      } else announceReply(found.w+'. '+found.d+(found.e?'\n\nEsempio: '+found.e:'')+'\n\nPuoi chiedere “Sinonimi”, “Contrari” oppure cercare un’altra parola.');
+      return;
+    }
+    announceReply('Non ho trovato una scheda corrispondente. Questa versione risponde a ricerche di parole e a poche richieste guidate, non analizza liberamente una frase.\n\nProva “Cosa significa garbato?” oppure apri il dizionario per cercare una parola.','Richiesta non riconosciuta');
+  }
+  function showExample(index) {
+    const x=practiceExamples[index % practiceExamples.length];
+    activeWordLab=null;
+    announceReply('Frase di partenza: «'+x.q+'»\n\nAlternativa: «'+x.a+'»\n\n'+x.why+'\n\nQuesto è un esempio preparato, non una correzione generata della tua frase.','Esercizio guidato · esempio preparato');
+  }
+  // Solo dati del laboratorio; nessun accesso ai preferiti o al diario dell’originale.
+  try {
+    $lab('lab-auto-speak').checked=storage.getItem('voice_auto')==='true';
+    const rate=Number(storage.getItem('voice_rate'));
+    if ([0.8,0.95,1.1].includes(rate)) $lab('lab-rate').value=String(rate);
+  } catch (_) {}
+  $lab('lab-auto-speak').addEventListener('change',e=>storage.setItem('voice_auto',String(e.target.checked)));
+  $lab('lab-rate').addEventListener('change',e=>storage.setItem('voice_rate',e.target.value));
+  $lab('lab-form').addEventListener('submit',e=>{e.preventDefault(); if (!recognition) answer(entry().value);});
+  $lab('lab-mic').addEventListener('click',beginListening);
+  $lab('lab-stop').addEventListener('click',()=>finishListening());
+  $lab('lab-speak').addEventListener('click',()=>{if(lastReply)say(lastReply);});
+  $lab('lab-stop-speech').addEventListener('click',()=>{stopSpeech();status('Lettura fermata.');});
+  $lab('lab-test-voice').addEventListener('click',()=>say('Benvenuto nel tuo laboratorio. Proviamo una parola alla volta.'));
+  $lab('lab-word').addEventListener('click',()=>{entry().value='Cosa significa garbato?';answer(entry().value);});
+  $lab('lab-example').addEventListener('click',()=>{entry().value='Un esempio';answer(entry().value);});
+  let exampleIndex=0;
+  $lab('lab-guided').addEventListener('click',()=>showExample(exampleIndex++));
+  $lab('lab-home-button').addEventListener('click',()=>{if(typeof showTab==='function')showTab('parla'); $lab('lab-panel').scrollIntoView({block:'start',behavior:'smooth'});});
+  $lab('lab-clear-turns').addEventListener('click',()=>{
+    finishListening(true);stopSpeech();entry().value='';activeWordLab=null;lastReply='';turns=0;
+    $lab('lab-turns').textContent='Nessun turno';$lab('lab-response').hidden=true;
+    status('Sessione di prova azzerata. Preferiti e parole salvate non sono stati cancellati.');
+  });
+  if (!api || !window.isSecureContext) {
+    $lab('lab-mic').textContent='Usa la dettatura';
+    status('Il microfono diretto non è disponibile qui. Puoi scrivere o usare la dettatura della tastiera.');
+  }
+  const count=wordList().length;
+  $lab('lab-word-count').textContent=count?count+' vocaboli nella copia di prova':'Dizionario di prova';
+  if(storage.unavailable)$lab('lab-storage-warning').hidden=false;
+  voicesChanged();
+  try { speechSynthesis.addEventListener('voiceschanged',voicesChanged); } catch (_) {}
+  document.addEventListener('visibilitychange',()=>{ if(document.hidden){finishListening(true);stopSpeech();} });
+  window.addEventListener('pagehide',()=>{finishListening(true);stopSpeech();});
+  // Non mantiene il microfono sempre acceso né lo riavvia in automatico.
+  if (typeof showTab==='function') showTab('parla');
+}
+
+const LAB_STYLE = `
+:root{--ink:#183b60;--sub:#536b83;--dark:#1e3a5f;--green:#2d5f94;--paper:#f3f6fa;--cream:#fff;--line:#dbe4ef;--mint:#e4edf8}
+.top{background:#1e3a5f!important;padding-top:20px}.brand-title{color:#fff}.hero h1 em{color:#e8cc96}.btn{background:#275788;border-color:#275788}.btn.secondary,.btn.light{color:#244e7e;background:#edf3fb;border-color:#cad9ec}.bigword,.phrasecard .after{color:#1e3a5f}.navbutton.active{color:#244e7e!important}.chip.active{background:#275788;border-color:#275788}
+#lab-marker{background:#e7eef8;color:#1e3a5f;padding:calc(10px + env(safe-area-inset-top,0px)) 18px 12px;border-bottom:1px solid #c7d8eb;font-size:13px}#lab-marker-inner{max-width:760px;margin:auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}#lab-marker strong{letter-spacing:.07em;font-size:12px}#lab-marker a{color:#1e3a5f;text-underline-offset:3px}#lab-home-button{border:1px solid #9db6d5;background:#fff;border-radius:9px;padding:9px 12px;color:#244e7e;font-size:13px;font-weight:750;min-height:42px}
+#lab-panel{background:#fff;border:1px solid #cddced;border-radius:20px;padding:20px;margin:0 0 28px;color:#1c3c5e;scroll-margin-top:18px}#lab-panel h2{font:normal 31px/1.1 Georgia,serif;margin:8px 0 10px}#lab-panel p{margin:8px 0 12px}#lab-panel .lab-small{font-size:13px;color:#526980;line-height:1.55}#lab-panel .lab-label{font-size:11px;font-weight:850;letter-spacing:.11em;text-transform:uppercase;color:#2f5d8d}#lab-panel button{min-height:46px;touch-action:manipulation}#lab-panel .lab-row{display:flex;flex-wrap:wrap;gap:9px;margin:12px 0}#lab-panel .lab-row .btn{flex:1 1 120px}#lab-panel label{display:block;font-size:14px;font-weight:700;margin:12px 0 6px}#lab-panel textarea{resize:vertical;min-height:110px;background:#fafcff;color:#1c3c5e;font-size:17px;line-height:1.55;width:100%;padding:13px;border:1px solid #b8cbe1;border-radius:13px}#lab-status{font-size:13px;padding:12px 14px;border-radius:12px;background:#eff4fa;color:#355570;min-height:60px}#lab-panel .lab-check{display:flex;align-items:flex-start;gap:10px;font-weight:500;font-size:14px}#lab-panel input[type=checkbox]{height:20px;width:20px;flex:0 0 20px;accent-color:#275788}#lab-response{margin-top:18px;border-left:3px solid #c69445;background:#f8fafc;padding:16px;border-radius:3px 14px 14px 3px}#lab-answer{white-space:pre-wrap;overflow-wrap:anywhere;font-size:16px;line-height:1.6}#lab-panel details{border-top:1px solid #e0e7f0;margin-top:18px;padding-top:14px}#lab-panel summary{cursor:pointer;font-weight:700;font-size:14px;padding:6px 0}#lab-panel select{width:100%;font-size:16px;padding:10px;border:1px solid #bdcde0;border-radius:10px;color:#203f61;background:#fff;min-height:44px}#lab-storage-warning{background:#fff1d9;padding:12px;border-radius:10px;font-size:13px;color:#71501b}#lab-panel [hidden],#lab-marker [hidden]{display:none!important}#lab-panel .lab-quiet{font-size:13px;background:transparent;border:0;color:#496b91;text-decoration:underline;text-underline-offset:3px;padding:8px 0}#lab-panel .lab-footer{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px}#lab-panel a{color:#244e7e}#lab-panel :focus-visible{outline:3px solid #c99543;outline-offset:3px}
+@media(max-width:380px){#lab-panel{padding:16px}.main{padding-left:12px;padding-right:12px}#lab-panel .lab-row{gap:7px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.view{animation:none}}
+`;
+const PANEL = `
+<section id="lab-panel" aria-label="Laboratorio vocale">
+<div class="lab-label">LAB 0.1 · VOCE A TURNI</div>
+<h2>Una parola, poi un’altra.</h2>
+<p class="lab-small">Parla o scrivi, controlla il testo e invia. Le risposte arrivano dal dizionario: <strong>non è ancora un tutore AI che corregge liberamente le frasi.</strong></p>
+<p id="lab-word-count" class="lab-small"></p>
+<p id="lab-storage-warning" hidden>Il browser non riesce a conservare tutti i dati. Per questa sessione uso la memoria temporanea: esporta le parole importanti prima di chiudere.</p>
+<form id="lab-form">
+<label for="lab-input">La tua parola o domanda</label>
+<textarea id="lab-input" maxlength="700" placeholder="Cosa significa garbato?" autocapitalize="sentences" spellcheck="true"></textarea>
+<div class="lab-row"><button class="btn" id="lab-mic" type="button">🎙 Parla</button><button class="btn secondary" id="lab-stop" type="button" disabled>Ho finito</button></div>
+<div id="lab-status" role="status" aria-live="polite">Pronto. Premi “Parla” o scrivi una domanda.</div>
+<div class="lab-row"><button class="btn" id="lab-send" type="submit">Invia al dizionario →</button></div>
+<label class="lab-check"><input type="checkbox" id="lab-auto-speak">Leggi la risposta quando è pronta</label>
+</form>
+<div id="lab-response" hidden><div class="lab-label" id="lab-answer-label">Risposta dal dizionario</div><p id="lab-answer"></p><div class="lab-row"><button class="btn secondary" id="lab-speak" type="button" disabled>🔊 Ascolta risposta</button><button class="btn secondary" id="lab-stop-speech" type="button" disabled>Ferma voce</button></div></div>
+<div class="lab-row"><button class="btn secondary small" id="lab-word" type="button">Prova “garbato”</button><button class="btn secondary small" id="lab-example" type="button">Un esempio</button><button class="btn secondary small" id="lab-guided" type="button">Frase guidata</button></div>
+<details><summary>Voce e prova audio</summary><label for="lab-voice">Voce disponibile sul dispositivo</label><select id="lab-voice"><option value="">Voce italiana del dispositivo</option></select><label for="lab-rate">Velocità</label><select id="lab-rate"><option value="0.8">Più lenta</option><option value="0.95" selected>Naturale</option><option value="1.1">Più veloce</option></select><div class="lab-row"><button type="button" class="btn secondary" id="lab-test-voice">Prova la voce</button></div><p class="lab-small">Se l’audio automatico non parte, usa “Ascolta risposta”. Se il microfono diretto non funziona, usa il microfono della tastiera nel campo del testo.</p></details>
+<details><summary>Che cosa è separato e che cosa fa questa prova</summary><p class="lab-small">Il laboratorio legge una copia del file pubblico del dizionario. Preferiti, parole personali, risultati e impostazioni sono salvati con nomi distinti: quelli dell’app principale non vengono letti o modificati. L’eventuale importazione di un tuo backup scrive soltanto nel laboratorio.</p><p class="lab-small">La copia del codice viene tenuta localmente, quando possibile; non è una garanzia di apertura offline. Le tue frasi di prova non vengono salvate in una cronologia. Il riconoscimento vocale è affidato al servizio del browser e può richiedere Internet o trasmettere l’audio a tale servizio. L’app non invia le frasi a un modello AI. Il microfono si attiva solo con il tuo tocco.</p><p class="lab-small">Puoi cercare una parola, il suo significato, i sinonimi, i contrari e l’esempio presente nella scheda. “Un esempio” mantiene il contesto della parola precedente. Le frasi guidate sono esempi preparati, non correzioni automatiche del tuo testo.</p><p class="lab-small">La separazione dei salvataggi evita interferenze involontarie, ma non è una barriera di sicurezza fra siti: entrambe le pagine restano sullo stesso dominio GitHub Pages.</p></details>
+<div class="lab-footer"><span class="lab-small" id="lab-turns">Nessun turno</span><button class="lab-quiet" id="lab-clear-turns" type="button">Azzera questa prova</button></div>
+</section>`;
+function makeScript(doc,body) { const s=doc.createElement('script'); s.textContent=body; return s; }
+function compile(source) {
+  const doc=new DOMParser().parseFromString(source,'text/html');
+  if (!doc.querySelector('#view-parla')) throw new Error('La base del dizionario non contiene la sezione prevista.');
+  // Riscrittura della copia in memoria, NON del file originale.
+  for (const script of [...doc.scripts]) {
+    if (script.src) throw new Error('La base ora usa script esterni: occorre verificare il laboratorio prima di proseguire.');
+    // Evita che una futura versione della base introduca archivi non isolati o service worker.
+    if (/\b(indexedDB|serviceWorker|sessionStorage)\b/.test(script.textContent))
+      throw new Error('La base usa un nuovo sistema di salvataggio: serve una verifica prima di creare la copia.');
+    script.textContent=script.textContent.replace(/\blocalStorage\b/g,'__italianoLabStorage')
+      .replace(/il-mio-italiano-backup/g,'il-mio-italiano-lab-backup');
+  }
+  doc.querySelectorAll('base,link[rel="manifest"]').forEach(el=>el.remove());
+  doc.title='Il mio italiano Lab — voce a turni';
+  let meta=doc.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if(meta)meta.content='Italiano Lab';
+  const title=doc.querySelector('.brand-title');if(title)title.textContent='Il mio italiano Lab';
+  const mark=doc.querySelector('.mark');if(mark){mark.textContent='L.';mark.setAttribute('aria-label','Laboratorio');}
+  const style=doc.createElement('style');style.textContent=LAB_STYLE;doc.head.append(style);
+  const adapter=makeScript(doc,'/* ITALIANO_LAB_COMPILED */\n('+storageAdapter.toString()+')();');doc.head.append(adapter);
+  const marker=doc.createElement('aside');marker.id='lab-marker';marker.innerHTML='<div id="lab-marker-inner"><strong>LABORATORIO · COPIA DI PROVA</strong><button type="button" id="lab-home-button">Apri prova vocale</button><a href="./index.html">Dizionario principale ↗</a></div>';doc.body.prepend(marker);
+  const target=doc.querySelector('#view-parla');target.insertAdjacentHTML('afterbegin',PANEL);
+  const module=makeScript(doc,'try { ('+installLab.toString()+')(); } catch (error) { console.error(error); var notice = document.getElementById("lab-status"); if(notice) notice.textContent = "La prova vocale non è stata inizializzata. Non aggiungere dati: conserva questa schermata per la verifica."; }');doc.body.append(module);
+  const html='<!doctype html>\n'+doc.documentElement.outerHTML;
+  return html;
+}
+async function launch() {
+  if(loading)return; loading=true;
+  const retry=document.getElementById('boot-retry');retry.hidden=true;
+  try {
+    if(!isHTTP)throw new Error('Apri questo file dopo averlo caricato su GitHub come lab.html, non nell’anteprima dell’app File.');
+    if(/\/index\.html$/i.test(location.pathname))throw new Error('Questo è il laboratorio: deve chiamarsi lab.html, non index.html.');
+    let source=readSnapshot();
+    if(!validSource(source)) {
+      bootStatus('Carico una copia del dizionario principale…','Leggo soltanto index.html. Non modifico il file online e non importo i tuoi salvataggi personali.');
+      const abort=new AbortController();const timer=setTimeout(()=>abort.abort(),18000);
+      try {
+        const response=await fetch(SOURCE.href,{method:'GET',cache:'no-store',credentials:'same-origin',signal:abort.signal});
+        if(!response.ok)throw new Error('Il dizionario principale non è raggiungibile (HTTP '+response.status+').');
+        source=await response.text();
+      } finally {clearTimeout(timer);}
+      if(!validSource(source))throw new Error('Non ho trovato la versione prevista del dizionario. Il laboratorio non modifica nulla: controlliamo insieme i file.');
+      // Verifica prima di conservarne la copia.
+      const compiled=compile(source);saveSnapshot(source);
+      document.open();document.write(compiled);document.close();
+    } else {
+      const compiled=compile(source);
+      document.open();document.write(compiled);document.close();
+    }
+  } catch(error) {
+    const message=error.name==='AbortError'?'La connessione non ha risposto. Il dizionario principale resta intatto.':String(error.message||error);
+    bootStatus('Il laboratorio non è ancora pronto.',message);
+    retry.hidden=false;loading=false;
+  }
+}
+document.getElementById('boot-retry').addEventListener('click',launch);
+launch();
+})();
+</script>
+</body>
+</html>
